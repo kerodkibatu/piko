@@ -15,6 +15,7 @@ import com.android.tools.smali.dexlib2.AccessFlags
 // self-contained. The long-press dialog injection point is identified from
 // the target APK (see HideChatPatch for details).
 internal const val EXTENSION_CLASS_NAME = "${PATCHES_DESCRIPTOR}/dm/HideChat;"
+internal const val INJECTOR_CLASS_NAME = "${PATCHES_DESCRIPTOR}/dm/HideChatInjector;"
 
 /**
  * The static long-press dialog builder (LX/08r4.A00 in v439): builds the

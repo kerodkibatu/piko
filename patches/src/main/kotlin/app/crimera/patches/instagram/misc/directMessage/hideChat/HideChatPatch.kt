@@ -13,12 +13,33 @@ import app.crimera.patches.instagram.utils.enableSettings
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.instructions
 import app.morphe.patcher.patch.bytecodePatch
-import app.morphe.util.getReference
-import app.morphe.util.registersUsed
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 private const val DIRECT_THREAD_KEY_CLASS = "Lcom/instagram/model/direct/DirectThreadKey;"
+
+/** Extracts the MethodReference from an instruction, if it has one. */
+private fun methodRefOrNull(insn: Any): MethodReference? {
+    val refIns = insn as? ReferenceInstruction ?: return null
+    return refIns.reference as? MethodReference
+}
+
+/** Gets the register numbers used by a five-register instruction (e.g. invoke-static {v6, v5}). */
+private fun fiveRegisters(insn: Any): List<Int> {
+    val five = insn as? FiveRegisterInstruction ?: return emptyList()
+    return listOf(five.registerC, five.registerD, five.registerE, five.registerF, five.registerG)
+        .take(five.registerCount)
+}
+
+/** Gets the single register used by an 11x instruction (e.g. return-object v0). */
+private fun singleRegister(insn: Any): Int {
+    val one = insn as? OneRegisterInstruction
+        ?: throw IllegalStateException("HideChat: expected single-register instruction")
+    return one.registerA
+}
 
 @Suppress("unused")
 val hideChatPatch =
@@ -39,7 +60,7 @@ val hideChatPatch =
                     0,
                     """
                     iget-object v0, p$threadKeyParamIndex, $DIRECT_THREAD_KEY_CLASS->A00:Ljava/lang/String;
-                    sput-object v0, $EXTENSION_CLASS_NAME->pendingThreadId:Ljava/lang/String;
+                    sput-object v0, $INJECTOR_CLASS_NAME->pendingThreadId:Ljava/lang/String;
                     """.trimIndent(),
                 )
             }
@@ -50,14 +71,14 @@ val hideChatPatch =
                 val copyInsn =
                     instructions.firstOrNull { insn ->
                         insn.opcode == Opcode.INVOKE_STATIC &&
-                            insn.getReference<MethodReference>()?.let { ref ->
+                            methodRefOrNull(insn)?.let { ref ->
                                 ref.name == "A1g" &&
                                     ref.parameterTypes == listOf("Ljava/lang/Iterable;", "Ljava/util/Collection;")
                             } == true
                     } ?: throw IllegalStateException("HideChat: row-list copy call not found")
                 val copyIndex = copyInsn.location.index
                 // invoke-static {vSrc, vList}: the list is the 2nd register.
-                val listRegister = copyInsn.registersUsed[1]
+                val listRegister = fiveRegisters(copyInsn)[1]
 
                 // The dialog controller is the receiver of the A09(List) call
                 // that immediately follows the copy.
@@ -67,17 +88,17 @@ val hideChatPatch =
                         .filter { it.location.index > copyIndex }
                         .firstOrNull { insn ->
                             insn.opcode == Opcode.INVOKE_VIRTUAL &&
-                                insn.getReference<MethodReference>()?.let { ref ->
+                                methodRefOrNull(insn)?.let { ref ->
                                     ref.name == "A09" &&
                                         ref.parameterTypes == listOf("Ljava/util/List;")
                                 } == true
                         } ?: throw IllegalStateException("HideChat: dialog show call not found")
-                val dialogRegister = showInsn.registersUsed[0]
+                val dialogRegister = fiveRegisters(showInsn)[0]
 
                 addInstructions(
                     copyIndex + 1,
                     """
-                    invoke-static {v$dialogRegister, v$listRegister}, $EXTENSION_CLASS_NAME->injectHideChatRow(Ljava/lang/Object;Ljava/util/List;)V
+                    invoke-static {v$dialogRegister, v$listRegister}, $INJECTOR_CLASS_NAME->injectHideChatRow(Ljava/lang/Object;Ljava/util/List;)V
                     """.trimIndent(),
                 )
             }
@@ -90,7 +111,7 @@ val hideChatPatch =
                     if (returnType != "V") {
                         instructions
                             .filter { it.opcode == Opcode.RETURN_OBJECT }
-                            .map { it.location.index to it.registersUsed[0] }
+                            .map { it.location.index to singleRegister(it) }
                             .sortedByDescending { it.first }
                             .forEach { (index, register) ->
                                 addInstructions(
