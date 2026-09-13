@@ -55,12 +55,15 @@ val hideChatPatch =
             ThreadLongPressDialogBuilderFingerprint.method.apply {
                 val threadKeyParamIndex =
                     parameters.indexOfFirst { it.type == DIRECT_THREAD_KEY_CLASS }
-                // v0 is free at method entry.
+                if (threadKeyParamIndex == -1) {
+                    throw IllegalStateException("HideChat: DirectThreadKey param not found")
+                }
+                // Pass the thread key object; the injector extracts the ID via reflection.
+                // This avoids inline field access and register allocation issues.
                 addInstructions(
                     0,
                     """
-                    iget-object v0, p$threadKeyParamIndex, $DIRECT_THREAD_KEY_CLASS->A00:Ljava/lang/String;
-                    sput-object v0, $INJECTOR_CLASS_NAME->pendingThreadId:Ljava/lang/String;
+                    invoke-static {p$threadKeyParamIndex}, $INJECTOR_CLASS_NAME->stashThreadKey(Ljava/lang/Object;)V
                     """.trimIndent(),
                 )
             }
