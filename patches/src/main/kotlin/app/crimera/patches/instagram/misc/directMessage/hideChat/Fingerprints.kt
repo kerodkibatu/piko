@@ -34,6 +34,23 @@ internal object ThreadLongPressDialogBuilderFingerprint : Fingerprint(
     },
 )
 
-internal object HideChatThreadDeserializerFingerprint : Fingerprint(
+/**
+ * The class containing the thread JSON parser (LX/0AMg in v439),
+ * identified by the thread-field keys its parse method reads.
+ */
+internal object HideChatThreadDeserializerClassFingerprint : Fingerprint(
     strings = listOf("users", "admin_user_ids", "left_users", "thread_v2_id", "input_mode"),
+)
+
+/**
+ * The thread deserializer bridge (LX/0AMg.unsafeParseFromJson in v439).
+ * NOTE: the string-heavy parse method (A00) returns void, so it cannot be
+ * filtered; the bridge is what returns the deserialized thread object.
+ */
+internal object HideChatThreadDeserializerFingerprint : Fingerprint(
+    classFingerprint = HideChatThreadDeserializerClassFingerprint,
+    custom = { methodDef, _ ->
+        methodDef.returnType == "Ljava/lang/Object;" &&
+            methodDef.name == "unsafeParseFromJson"
+    },
 )

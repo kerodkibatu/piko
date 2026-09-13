@@ -63,10 +63,12 @@ val hideChatPatch =
                 val registerCount = implementation!!.registerCount
                 val paramCount = parameters.size
                 val vRegister = registerCount - paramCount + threadKeyParamIndex
+                // NOTE: vRegister is v61 in v439 -- the plain {vN} invoke form
+                // only encodes v0..v15, so always use the /range form here.
                 addInstructions(
                     0,
                     """
-                    invoke-static {v$vRegister}, $INJECTOR_CLASS_NAME->stashThreadKey(Ljava/lang/Object;)V
+                    invoke-static/range {v$vRegister .. v$vRegister}, $INJECTOR_CLASS_NAME->stashThreadKey(Ljava/lang/Object;)V
                     """.trimIndent(),
                 )
             }
@@ -101,11 +103,24 @@ val hideChatPatch =
                         } ?: throw IllegalStateException("HideChat: dialog show call not found")
                 val dialogRegister = fiveRegisters(showInsn)[0]
 
+                // injectHideChatRow(Object dialog, List rows): v4/v5 in v439
+                // are both < 16 so the plain {vA, vB} form works; fall back
+                // to /range when they are consecutive, else fail loudly.
+                val rowInjection =
+                    if (dialogRegister < 16 && listRegister < 16) {
+                        "invoke-static {v$dialogRegister, v$listRegister}, " +
+                            "$INJECTOR_CLASS_NAME->injectHideChatRow(Ljava/lang/Object;Ljava/util/List;)V"
+                    } else if (listRegister == dialogRegister + 1) {
+                        "invoke-static/range {v$dialogRegister .. v$listRegister}, " +
+                            "$INJECTOR_CLASS_NAME->injectHideChatRow(Ljava/lang/Object;Ljava/util/List;)V"
+                    } else {
+                        throw IllegalStateException(
+                            "HideChat: row-injection registers v$dialogRegister/v$listRegister not encodable",
+                        )
+                    }
                 addInstructions(
                     copyIndex + 1,
-                    """
-                    invoke-static {v$dialogRegister, v$listRegister}, $INJECTOR_CLASS_NAME->injectHideChatRow(Ljava/lang/Object;Ljava/util/List;)V
-                    """.trimIndent(),
+                    rowInjection,
                 )
             }
 
@@ -114,20 +129,26 @@ val hideChatPatch =
             // the thread; anything else passes through untouched.
             HideChatThreadDeserializerFingerprint.apply {
                 method.apply {
-                    if (returnType != "V") {
+                    if (returnType == "V") {
+                        throw IllegalStateException("HideChat: deserializer returns void")
+                    }
+                    val returns =
                         instructions
                             .filter { it.opcode == Opcode.RETURN_OBJECT }
                             .map { it.location.index to singleRegister(it) }
                             .sortedByDescending { it.first }
-                            .forEach { (index, register) ->
-                                addInstructions(
-                                    index,
-                                    """
-                                    invoke-static {v$register}, $EXTENSION_CLASS_NAME->filter(Ljava/lang/Object;)Ljava/lang/Object;
-                                    move-result-object v$register
-                                    """.trimIndent(),
-                                )
-                            }
+                    if (returns.isEmpty()) {
+                        throw IllegalStateException("HideChat: no object return in deserializer")
+                    }
+                    returns.forEach { (index, register) ->
+                        // /range: the returned register can be >= v16.
+                        addInstructions(
+                            index,
+                            """
+                            invoke-static/range {v$register .. v$register}, $EXTENSION_CLASS_NAME->filter(Ljava/lang/Object;)Ljava/lang/Object;
+                            move-result-object v$register
+                            """.trimIndent(),
+                        )
                     }
                 }
             }
