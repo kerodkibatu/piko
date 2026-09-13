@@ -101,6 +101,26 @@ public class Pref {
         return SharedPref.getBooleanPref(Settings.ENABLE_MARK_CHAT_AS_READ) && SettingsStatus.markChatAsRead;
     }
 
+    public static boolean enableHideChatOption() {
+        return SharedPref.getBooleanPref(Settings.ENABLE_HIDE_CHAT) && SettingsStatus.hideChat;
+    }
+
+    public static Set<String> hiddenChatThreadIds() {
+        return SharedPref.getSetPref(Settings.HIDDEN_CHAT_THREAD_IDS);
+    }
+
+    public static Set<String> hiddenChatThreadNames() {
+        return SharedPref.getSetPref(Settings.HIDDEN_CHAT_THREAD_NAMES);
+    }
+
+    public static void setHiddenChatThreadIds(Set<String> ids) {
+        SharedPref.setSetPref(Settings.HIDDEN_CHAT_THREAD_IDS.key, ids);
+    }
+
+    public static void setHiddenChatThreadNames(Set<String> entries) {
+        SharedPref.setSetPref(Settings.HIDDEN_CHAT_THREAD_NAMES.key, entries);
+    }
+
     // Return false = call the message seen api.
     // Return true = blocks the message seen api.
     public static boolean viewDmAnonymously() {

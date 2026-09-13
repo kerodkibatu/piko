@@ -130,6 +130,16 @@
     <string name="piko_unlimited_replays_desc">Changes unexpired view once, view twice media to permanent view</string>
     <string name="piko_enable_mark_chat_as_read">Enable mark chat as read option</string>
     <string name="piko_enable_mark_chat_as_read_desc">Get an option, on long pressing the chat, to mark it as read</string>
+    <string name="piko_enable_hide_chat">Enable hide chat option</string>
+    <string name="piko_enable_hide_chat_desc">Get an option, on long pressing the chat, to hide it from your inbox</string>
+    <string name="piko_hide_chat">Hide chat</string>
+    <string name="piko_chat_hidden">Chat hidden</string>
+    <string name="piko_hidden_chats">Hidden chats</string>
+    <string name="piko_hidden_chats_desc">View and unhide chats you have hidden</string>
+    <string name="piko_no_hidden_chats">No hidden chats</string>
+    <string name="piko_hidden_chat_fallback">Hidden chat</string>
+    <string name="piko_unhide">Unhide</string>
+    <string name="piko_unhide_chat_confirm">Unhide this chat? It will reappear in your inbox.</string>
 
     <!-- Download Media Section -->
     <string name="piko_category_download_media">Download media</string>

@@ -98,4 +98,8 @@ public class Settings {
 
     public static final StringSetting FILTER_STORY_MIN_STORY_ITEMS = new StringSetting("filter_story_min_story_items", "1");
     public static final StringSetting FILTER_STORY_MAX_STORY_ITEMS = new StringSetting("filter_story_max_story_items", "9999");
+
+    public static final BooleanSetting ENABLE_HIDE_CHAT = new BooleanSetting("enable_hide_chat", true);
+    public static final StringSetting HIDDEN_CHAT_THREAD_IDS = new StringSetting("hidden_chat_thread_ids", "");
+    public static final StringSetting HIDDEN_CHAT_THREAD_NAMES = new StringSetting("hidden_chat_thread_names", "");
 }
