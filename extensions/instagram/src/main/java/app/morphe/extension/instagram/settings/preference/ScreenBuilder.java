@@ -238,6 +238,23 @@ public class ScreenBuilder {
             );
         }
 
+        if (SettingsStatus.hideChat) {
+            addPreference(
+                    helper.switchPreference(
+                            str("piko_enable_hide_chat"),
+                            str("piko_enable_hide_chat_desc"),
+                            Settings.ENABLE_HIDE_CHAT
+                    )
+            );
+            addPreference(
+                    helper.buttonPreference(
+                            str("piko_hidden_chats"),
+                            str("piko_hidden_chats_desc"),
+                            "hidden_chats"
+                    )
+            );
+        }
+
         if (SettingsStatus.saveDeletedMessages) {
             addPreference(
                     helper.switchPreference(
