@@ -1,6 +1,6 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "3.9.0",
+  "version": "3.9.0-hidechat",
   "patches": [
     {
       "name": "Add ability to copy media link",
@@ -3745,7 +3745,7 @@
     },
     {
       "name": "Theme",
-      "description": "Adds Material You and AMOLED controls to Piko settings on Android 12 and later. On Android 8–11, it applies a fixed Material You-style theme or an optional AMOLED theme.",
+      "description": "Adds Material You and AMOLED controls to Piko settings on Android 12 and later. On Android 8\u201311, it applies a fixed Material You-style theme or an optional AMOLED theme.",
       "default": true,
       "dependencies": [
         "BytecodePatch",
@@ -3777,8 +3777,8 @@
       "options": [
         {
           "key": "amoled",
-          "title": "Pure-black AMOLED theme for Android 8–11",
-          "description": "Use a fixed pure-black AMOLED theme instead of the fixed Material You-style theme on Android 8–11. On Android 12 and later, use the AMOLED control in Piko settings.",
+          "title": "Pure-black AMOLED theme for Android 8\u201311",
+          "description": "Use a fixed pure-black AMOLED theme instead of the fixed Material You-style theme on Android 8\u201311. On Android 12 and later, use the AMOLED control in Piko settings.",
           "required": false,
           "type": "kotlin.Boolean",
           "default": false,
@@ -4019,6 +4019,38 @@
         "BytecodePatch",
         "BytecodePatch",
         "BytecodePatch"
+      ],
+      "compatiblePackages": [
+        {
+          "packageName": "com.instagram.android",
+          "name": "Instagram",
+          "description": null,
+          "apkFileType": "APKM",
+          "appIconColor": "#FC483C",
+          "signatures": null,
+          "targets": [
+            {
+              "version": "439.0.0.37.89",
+              "versionCodes": {
+                "ARM64_V8A": 384510827
+              },
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
+    {
+      "name": "Hide chat",
+      "description": "Adds option to hide a chat on long press. Hidden chats are listed under Piko settings where they can be unhidden",
+      "default": true,
+      "dependencies": [
+        "BytecodePatch",
+        "BytecodePatch",
+        "ResourcePatch"
       ],
       "compatiblePackages": [
         {
