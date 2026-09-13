@@ -7,21 +7,18 @@
 package app.crimera.patches.instagram.misc.directMessage.hideChat
 
 import app.crimera.patches.instagram.entity.userdata.userDataEntity
-import app.crimera.patches.instagram.misc.directMessage.markChatAsReadPatch.ThreadLongPressButtonActionFingerprint
-import app.crimera.patches.instagram.misc.directMessage.markChatAsReadPatch.ThreadLongPressButtonsEnumInitFingerprint
-import app.crimera.patches.instagram.misc.directMessage.markChatAsReadPatch.ThreadLongPressMuteButtonBuilderFingerprint
 import app.crimera.patches.instagram.misc.settings.settingsPatch
 import app.crimera.patches.instagram.utils.Constants.COMPATIBILITY_INSTAGRAM
-import app.crimera.patches.instagram.utils.Constants.USER_SESSION_CLASS
 import app.crimera.patches.instagram.utils.enableSettings
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
-import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.instructions
 import app.morphe.patcher.patch.bytecodePatch
-import app.morphe.patcher.util.smali.ExternalLabel
+import app.morphe.util.getReference
 import app.morphe.util.registersUsed
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
+
+private const val DIRECT_THREAD_KEY_CLASS = "Lcom/instagram/model/direct/DirectThreadKey;"
 
 @Suppress("unused")
 val hideChatPatch =
@@ -32,65 +29,57 @@ val hideChatPatch =
         compatibleWith(COMPATIBILITY_INSTAGRAM)
         dependsOn(settingsPatch, userDataEntity, hideChatResourcePatch)
         execute {
-            val buttonEnumClassName: String
-            ThreadLongPressButtonsEnumInitFingerprint.apply {
-                buttonEnumClassName = classDef.type
-            }
-
-            // TODO(hide-chat): sections 1-2 are a placeholder. The enum list is
-            // NOT a safe injection point (no HIDE enum constant exists). Replace
-            // with the target-APK-evidenced long-press dialog row injection
-            // before shipping: locate the class containing "[DEBUG] Thread info"
-            // and the dialog row builder (see HideChat.java addButton/buttonAction
-            // for the intended extension API).
-            // 1. Long-press menu: append the "Hide chat" entry to the button list.
-            ThreadLongPressMuteButtonBuilderFingerprint.method.apply {
-                val listParameterIndex = parameterTypes.indexOf("Ljava/util/List;")
+            // 1. Stash the thread id when the long-press dialog builder starts.
+            // The builder is static, so pN maps directly to parameters[N].
+            ThreadLongPressDialogBuilderFingerprint.method.apply {
+                val threadKeyParamIndex =
+                    parameters.indexOfFirst { it.type == DIRECT_THREAD_KEY_CLASS }
+                // v0 is free at method entry.
                 addInstructions(
                     0,
                     """
-                    invoke-static {p$listParameterIndex}, $EXTENSION_CLASS_NAME->addButton(Ljava/util/List;)Ljava/util/List;
-                    move-result-object p$listParameterIndex
-
+                    iget-object v0, p$threadKeyParamIndex, $DIRECT_THREAD_KEY_CLASS->A00:Ljava/lang/String;
+                    sput-object v0, $EXTENSION_CLASS_NAME->pendingThreadId:Ljava/lang/String;
                     """.trimIndent(),
                 )
             }
 
-            // 2. Long-press menu: consume the press when our entry is tapped.
-            ThreadLongPressButtonActionFingerprint.apply {
-                val directThreadKeyClassName = "Lcom/instagram/model/direct/DirectThreadKey;"
-                val context = "Landroid/content/Context;"
+            // 2. Append the "Hide chat" row after the stock rows are copied
+            // into the dialog's row list (right after the A1g copy call).
+            ThreadLongPressDialogBuilderFingerprint.method.apply {
+                val copyInsn =
+                    instructions.firstOrNull { insn ->
+                        insn.opcode == Opcode.INVOKE_STATIC &&
+                            insn.getReference<MethodReference>()?.let { ref ->
+                                ref.name == "A1g" &&
+                                    ref.parameterTypes == listOf("Ljava/lang/Iterable;", "Ljava/util/Collection;")
+                            } == true
+                    } ?: throw IllegalStateException("HideChat: row-list copy call not found")
+                val copyIndex = copyInsn.location.index
+                // invoke-static {vSrc, vList}: the list is the 2nd register.
+                val listRegister = copyInsn.registersUsed[1]
 
-                val userSessionFieldRef = classDef.fields.first { it.type == USER_SESSION_CLASS }
-                val contextFieldRef = classDef.fields.first { it.type == context }
+                // The dialog controller is the receiver of the A09(List) call
+                // that immediately follows the copy.
+                val showInsn =
+                    instructions
+                        .asSequence()
+                        .filter { it.location.index > copyIndex }
+                        .firstOrNull { insn ->
+                            insn.opcode == Opcode.INVOKE_VIRTUAL &&
+                                insn.getReference<MethodReference>()?.let { ref ->
+                                    ref.name == "A09" &&
+                                        ref.parameterTypes == listOf("Ljava/util/List;")
+                                } == true
+                        } ?: throw IllegalStateException("HideChat: dialog show call not found")
+                val dialogRegister = showInsn.registersUsed[0]
 
-                method.apply {
-                    val buttonParameterIndex = parameters.indexOfFirst { it.type == buttonEnumClassName } + 1
-                    val directThreadKeyParameterIndex = parameters.indexOfFirst { it.type == directThreadKeyClassName } + 1
-                    val threadInfoParameterIndex = directThreadKeyParameterIndex - 2
-
-                    // Hard coding register names as these instructions
-                    // will be added on the first line.
-                    addInstructionsWithLabels(
-                        0,
-                        """
-                        move-object/from16 v0, p0
-                        iget-object v1, v0, $contextFieldRef
-                        iget-object v2, v0, $userSessionFieldRef
-
-                        move-object/from16 v3, p$buttonParameterIndex
-
-                        move-object/from16 v4, p$threadInfoParameterIndex
-                        move-object/from16 v5, p$directThreadKeyParameterIndex
-
-                        invoke-static {v1,v2,v3,v4,v5}, $EXTENSION_CLASS_NAME->buttonAction(Landroid/content/Context;$USER_SESSION_CLASS;Ljava/lang/Object;Ljava/lang/Object;$directThreadKeyClassName)Z
-                        move-result v0
-                        if-eqz v0, :piko
-                        return-void
-                        """.trimIndent(),
-                        ExternalLabel("piko", getInstruction(0)),
-                    )
-                }
+                addInstructions(
+                    copyIndex + 1,
+                    """
+                    invoke-static {v$dialogRegister, v$listRegister}, $EXTENSION_CLASS_NAME->injectHideChatRow(Ljava/lang/Object;Ljava/util/List;)V
+                    """.trimIndent(),
+                )
             }
 
             // 3. Inbox list: drop hidden threads as they are deserialized,

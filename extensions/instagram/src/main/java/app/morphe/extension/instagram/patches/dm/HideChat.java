@@ -8,14 +8,20 @@ package app.morphe.extension.instagram.patches.dm;
 
 import static app.morphe.extension.instagram.utils.IgStr.str;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
+import android.widget.PopupWindow;
 
 import app.morphe.extension.crimera.PikoUtils;
 import app.morphe.extension.instagram.entity.UserData;
@@ -30,6 +36,21 @@ public class HideChat {
 
     /** Tag used to identify our injected long-press menu entry. */
     private static final String HIDE_BUTTON_TAG = "HIDE_CHAT";
+
+    /** Row label shown in the long-press dialog. */
+    private static final String HIDE_CHAT_LABEL = "Hide chat";
+
+    /**
+     * Thread id of the long-press dialog currently being built. Stashed by
+     * the patched dialog builder at method entry, consumed by
+     * {@link #injectHideChatRow(Object, List)}.
+     */
+    public static String pendingThreadId;
+
+    /** Obfuscated long-press row model class (LX/0VTM in v439). */
+    private static final String ROW_MODEL_CLASS = "X.0VTM";
+    /** Obfuscated row click-listener interface (LX/0nQi in v439). */
+    private static final String ROW_LISTENER_CLASS = "X.0nQi";
 
     private static final String DIRECT_THREAD_KEY_CLASS = "com.instagram.model.direct.DirectThreadKey";
 
@@ -232,39 +253,115 @@ public class HideChat {
     }
 
     // ------------------------------------------------------------------
-    // Long-press menu entry point. The exact row-injection mechanism is
-    // chosen against the target APK's menu construction; these are the
-    // hooks the patch wires into the thread long-press flow.
+    // Long-press menu entry point. The patched dialog builder stashes the
+    // thread id in {@link #pendingThreadId}, then calls
+    // {@link #injectHideChatRow(Object, List)} after the stock rows are
+    // assembled. We append a genuine row model (LX/0VTM) with a dynamic
+    // Proxy implementing the row click listener (LX/0nQi).
     // ------------------------------------------------------------------
 
-    public static List addButton(List buttonList) {
+    /**
+     * Appends the "Hide chat" row to the long-press dialog's row list.
+     *
+     * @param dialog the dialog controller (a PopupWindow subclass); its
+     *               Context field is used for hiding + refresh.
+     * @param rows   the mutable row-model list about to be shown.
+     */
+    public static void injectHideChatRow(Object dialog, List rows) {
+        String threadId = pendingThreadId;
+        pendingThreadId = null;
+        if (threadId == null || threadId.isEmpty() || dialog == null || rows == null) return;
         try {
-            if (Pref.enableHideChatOption()) {
-                // Marker entry identifying our row; the click handler below
-                // consumes it before Instagram sees it.
-                buttonList.add(HIDE_BUTTON_TAG);
+            if (!Pref.enableHideChatOption()) return;
+        } catch (Exception e) {
+            return;
+        }
+
+        // The dialog's Context field (A02 in v439); fall back to the app context.
+        Context context = extractDialogContext(dialog);
+        if (context == null) {
+            try {
+                context = PikoUtils.getContext();
+            } catch (Exception ignored) {
             }
+        }
+        if (context == null) return;
+        final Context ctx = context;
+        final String tid = threadId;
+        final Object dlg = dialog;
+
+        try {
+            ClassLoader loader = HideChat.class.getClassLoader();
+            Class<?> rowClass = Class.forName(ROW_MODEL_CLASS, false, loader);
+            Class<?> listenerIface = Class.forName(ROW_LISTENER_CLASS, false, loader);
+
+            // Row click listener: BsU() = enabled flag, Esq() = on tap.
+            Object listener = Proxy.newProxyInstance(
+                    loader,
+                    new Class<?>[]{listenerIface},
+                    (proxy, method, args) -> {
+                        String name = method.getName();
+                        if ("Esq".equals(name)) {
+                            try {
+                                ((PopupWindow) dlg).dismiss();
+                            } catch (Exception ignored) {
+                            }
+                            hideThread(ctx, tid);
+                            return null;
+                        }
+                        if ("BsU".equals(name)) return Boolean.TRUE;
+                        return null;
+                    });
+
+            // Reuse the first stock row's icon so ours matches the menu style.
+            Drawable icon = null;
+            try {
+                if (!rows.isEmpty()) {
+                    Object first = rows.get(0);
+                    Field iconField = first.getClass().getDeclaredField("A00");
+                    iconField.setAccessible(true);
+                    Object iconObj = iconField.get(first);
+                    if (iconObj instanceof Drawable) icon = (Drawable) iconObj;
+                }
+            } catch (Exception ignored) {
+            }
+
+            // LX/0VTM(<Drawable>, <Drawable>, LX/0nQi;, Integer, String, String,
+            //          Z, Z, Z, Z, Z)
+            // p3 (listener) and p5 (label) must be non-null.
+            Constructor<?> ctor = rowClass.getConstructor(
+                    Drawable.class, Drawable.class, listenerIface,
+                    Integer.class, String.class, String.class,
+                    boolean.class, boolean.class, boolean.class, boolean.class, boolean.class);
+            Object row = ctor.newInstance(
+                    icon, null, listener, null, HIDE_CHAT_LABEL, null,
+                    false, false, false, false, false);
+
+            // noinspection unchecked
+            rows.add(row);
         } catch (Exception e) {
             PikoUtils.logger(e);
         }
-        return buttonList;
+    }
+
+    /** Reads the dialog's Context field (A02 in v439). */
+    private static Context extractDialogContext(Object dialog) {
+        try {
+            Field f = dialog.getClass().getDeclaredField("A02");
+            f.setAccessible(true);
+            Object value = f.get(dialog);
+            return value instanceof Context ? (Context) value : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // Return true = consume the press (skip Instagram's handling).
     // Return false = let Instagram handle it.
+    // Kept for API compatibility; the row-injection path above is authoritative.
     public static boolean buttonAction(Context context, UserSession userSession,
                                        Object buttonPressed, Object threadInfo,
                                        DirectThreadKey directThreadKey) {
-        try {
-            if (buttonPressed != null && HIDE_BUTTON_TAG.equals(buttonPressed.toString())
-                    && directThreadKey != null) {
-                String threadId = directThreadKey.A00;
-                hideThread(context, threadId);
-                return true;
-            }
-        } catch (Exception e) {
-            PikoUtils.logger(e);
-        }
         return false;
     }
 
@@ -276,7 +373,22 @@ public class HideChat {
         } catch (Exception e) {
             PikoUtils.logger(e);
         }
-        // TODO: refresh the inbox list so the thread disappears immediately.
+        // Refresh the inbox so the thread disappears immediately. Unwrap to
+        // the host Activity and recreate it; the deserializer filter drops the
+        // hidden thread on reload.
+        try {
+            Context base = context;
+            int depth = 0;
+            while (base instanceof ContextWrapper && !(base instanceof Activity) && depth < 8) {
+                base = ((ContextWrapper) base).getBaseContext();
+                depth++;
+            }
+            if (base instanceof Activity) {
+                ((Activity) base).recreate();
+            }
+        } catch (Exception e) {
+            PikoUtils.logger(e);
+        }
     }
 
     // ------------------------------------------------------------------

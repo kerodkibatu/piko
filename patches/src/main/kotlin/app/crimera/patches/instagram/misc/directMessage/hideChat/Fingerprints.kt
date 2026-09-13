@@ -6,13 +6,33 @@
 
 package app.crimera.patches.instagram.misc.directMessage.hideChat
 
+import app.crimera.patches.instagram.misc.directMessage.markChatAsReadPatch.ThreadLongPressButtonStringListFingerprint
 import app.crimera.patches.instagram.utils.Constants.PATCHES_DESCRIPTOR
 import app.morphe.patcher.Fingerprint
+import com.android.tools.smali.dexlib2.AccessFlags
 
 // The DM thread deserializer hook is declared locally to keep this patch
 // self-contained. The long-press dialog injection point is identified from
 // the target APK (see HideChatPatch for details).
 internal const val EXTENSION_CLASS_NAME = "${PATCHES_DESCRIPTOR}/dm/HideChat;"
+
+/**
+ * The static long-press dialog builder (LX/08r4.A00 in v439): builds the
+ * thread long-press dialog, copies the stock row models into a list, and
+ * hands it to the dialog controller. Identified structurally (static, 17
+ * params including DirectThreadKey and the row List).
+ */
+internal object ThreadLongPressDialogBuilderFingerprint : Fingerprint(
+    classFingerprint = ThreadLongPressButtonStringListFingerprint,
+    strings = listOf("long_press"),
+    custom = { methodDef, _ ->
+        AccessFlags.STATIC.isSet(methodDef.accessFlags) &&
+            methodDef.returnType == "V" &&
+            methodDef.parameters.size == 17 &&
+            methodDef.parameters.any { it.type == "Lcom/instagram/model/direct/DirectThreadKey;" } &&
+            methodDef.parameters.any { it.type == "Ljava/util/List;" }
+    },
+)
 
 internal object HideChatThreadDeserializerFingerprint : Fingerprint(
     strings = listOf("users", "admin_user_ids", "left_users", "thread_v2_id", "input_mode"),
