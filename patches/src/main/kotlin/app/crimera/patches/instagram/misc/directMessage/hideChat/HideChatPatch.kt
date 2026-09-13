@@ -127,29 +127,27 @@ val hideChatPatch =
             // 3. Inbox list: drop hidden threads as they are deserialized,
             // so they never reach the inbox adapter. Returning null removes
             // the thread; anything else passes through untouched.
-            HideChatThreadDeserializerFingerprint.apply {
-                method.apply {
-                    if (returnType == "V") {
-                        throw IllegalStateException("HideChat: deserializer returns void")
-                    }
-                    val returns =
-                        instructions
-                            .filter { it.opcode == Opcode.RETURN_OBJECT }
-                            .map { it.location.index to singleRegister(it) }
-                            .sortedByDescending { it.first }
-                    if (returns.isEmpty()) {
-                        throw IllegalStateException("HideChat: no object return in deserializer")
-                    }
-                    returns.forEach { (index, register) ->
-                        // /range: the returned register can be >= v16.
-                        addInstructions(
-                            index,
-                            """
-                            invoke-static/range {v$register .. v$register}, $EXTENSION_CLASS_NAME->filter(Ljava/lang/Object;)Ljava/lang/Object;
-                            move-result-object v$register
-                            """.trimIndent(),
-                        )
-                    }
+            HideChatThreadDeserializerFingerprint.method.apply {
+                if (returnType == "V") {
+                    throw IllegalStateException("HideChat: deserializer returns void")
+                }
+                val returns =
+                    instructions
+                        .filter { it.opcode == Opcode.RETURN_OBJECT }
+                        .map { it.location.index to singleRegister(it) }
+                        .sortedByDescending { it.first }
+                if (returns.isEmpty()) {
+                    throw IllegalStateException("HideChat: no object return in deserializer")
+                }
+                returns.forEach { (index, register) ->
+                    // /range: the returned register can be >= v16.
+                    addInstructions(
+                        index,
+                        """
+                        invoke-static/range {v$register .. v$register}, $EXTENSION_CLASS_NAME->filter(Ljava/lang/Object;)Ljava/lang/Object;
+                        move-result-object v$register
+                        """.trimIndent(),
+                    )
                 }
             }
 

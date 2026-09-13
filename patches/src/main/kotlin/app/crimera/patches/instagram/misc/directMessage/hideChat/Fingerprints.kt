@@ -37,9 +37,12 @@ internal object ThreadLongPressDialogBuilderFingerprint : Fingerprint(
 /**
  * The class containing the thread JSON parser (LX/0AMg in v439),
  * identified by the thread-field keys its parse method reads.
+ * The returnType narrows it to the void parse method (A00) that
+ * contains these strings.
  */
 internal object HideChatThreadDeserializerClassFingerprint : Fingerprint(
     strings = listOf("users", "admin_user_ids", "left_users", "thread_v2_id", "input_mode"),
+    returnType = "V",
 )
 
 /**
