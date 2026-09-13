@@ -25,7 +25,6 @@ internal const val INJECTOR_CLASS_NAME = "${PATCHES_DESCRIPTOR}/dm/HideChatInjec
  */
 internal object ThreadLongPressDialogBuilderFingerprint : Fingerprint(
     classFingerprint = ThreadLongPressButtonStringListFingerprint,
-    strings = listOf("long_press"),
     custom = { methodDef, _ ->
         AccessFlags.STATIC.isSet(methodDef.accessFlags) &&
             methodDef.returnType == "V" &&

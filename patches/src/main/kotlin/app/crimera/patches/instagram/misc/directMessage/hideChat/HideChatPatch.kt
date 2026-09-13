@@ -52,18 +52,21 @@ val hideChatPatch =
         execute {
             // 1. Stash the thread id when the long-press dialog builder starts.
             // The builder is static, so pN maps directly to parameters[N].
+            // NOTE: The patcher's smali lexer doesn't support two-digit p registers (e.g. p8),
+            // so we convert to v registers: pN = v(registerCount - paramCount + N)
             ThreadLongPressDialogBuilderFingerprint.method.apply {
                 val threadKeyParamIndex =
                     parameters.indexOfFirst { it.type == DIRECT_THREAD_KEY_CLASS }
                 if (threadKeyParamIndex == -1) {
                     throw IllegalStateException("HideChat: DirectThreadKey param not found")
                 }
-                // Pass the thread key object; the injector extracts the ID via reflection.
-                // This avoids inline field access and register allocation issues.
+                val registerCount = implementation!!.registerCount
+                val paramCount = parameters.size
+                val vRegister = registerCount - paramCount + threadKeyParamIndex
                 addInstructions(
                     0,
                     """
-                    invoke-static {p$threadKeyParamIndex}, $INJECTOR_CLASS_NAME->stashThreadKey(Ljava/lang/Object;)V
+                    invoke-static {v$vRegister}, $INJECTOR_CLASS_NAME->stashThreadKey(Ljava/lang/Object;)V
                     """.trimIndent(),
                 )
             }
